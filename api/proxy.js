@@ -9,23 +9,16 @@ export default async function handler(req, res) {
     'Access-Control-Allow-Headers',
     'Content-Type,Range,Accept,Origin,Referer,User-Agent'
   );
-  if (req.method === 'OPTIONS') {
-    res.status(204).end();
-    return;
-  }
+  if (req.method === 'OPTIONS') return res.status(204).end();
 
   try {
-    const raw = (req.query.u || req.query.pk || '').toString();
-    if (!raw) return res.status(400).end('Missing "u"');
+    const uParam = (req.query.u || req.query.pk || '').toString();
+    if (!uParam) return res.status(400).end('Missing "u"');
 
-    // ВАЖНО: параметр u приходит закодированным => раскодируем перед fetch
-    let target;
-    try { target = decodeURIComponent(raw); } catch { target = raw; }
-    if (!/^https?:\/\//i.test(target)) {
-      return res.status(400).end('Bad "u"');
-    }
+    // ВАЖНО: поддержим и уже закодированный, и обычный URL
+    const target = uParam.startsWith('http') ? uParam : decodeURIComponent(uParam);
 
-    // Прокинем ключевые заголовки (особенно Range)
+    // Прокидываем ключевые заголовки (особенно Range)
     const fwd = {};
     if (req.headers.range) fwd['Range'] = req.headers.range;
     if (req.headers['user-agent']) fwd['User-Agent'] = req.headers['user-agent'];
@@ -51,11 +44,10 @@ export default async function handler(req, res) {
       const v = upstream.headers.get(h);
       if (v) res.setHeader(h, v);
     }
-    // Гарантируем Accept-Ranges
     if (!res.getHeader('Accept-Ranges')) res.setHeader('Accept-Ranges', 'bytes');
 
-    // Если запрашивали Range, а апстрим ответил 200 — вернём 206
-    const wantRange = !!req.headers.range;
+    // Если был Range-запрос, а апстрим дал 200 — отдадим 206
+    const wantRange = Boolean(req.headers.range);
     const status = wantRange && upstream.status === 200 ? 206 : upstream.status;
     res.status(status);
 

@@ -15,19 +15,23 @@ export default async function handler(req, res) {
   }
 
   try {
-    const u = (req.query.u || req.query.pk || '').toString();
-    if (!u) {
-      res.status(400).end('Missing "u"');
-      return;
+    const raw = (req.query.u || req.query.pk || '').toString();
+    if (!raw) return res.status(400).end('Missing "u"');
+
+    // ВАЖНО: параметр u приходит закодированным => раскодируем перед fetch
+    let target;
+    try { target = decodeURIComponent(raw); } catch { target = raw; }
+    if (!/^https?:\/\//i.test(target)) {
+      return res.status(400).end('Bad "u"');
     }
 
-    // Прокидываем ключевые заголовки (особенно Range)
+    // Прокинем ключевые заголовки (особенно Range)
     const fwd = {};
     if (req.headers.range) fwd['Range'] = req.headers.range;
     if (req.headers['user-agent']) fwd['User-Agent'] = req.headers['user-agent'];
     if (req.headers['accept']) fwd['Accept'] = req.headers['accept'];
 
-    const upstream = await fetch(u, {
+    const upstream = await fetch(target, {
       method: req.method === 'HEAD' ? 'HEAD' : 'GET',
       headers: fwd,
       redirect: 'follow',
